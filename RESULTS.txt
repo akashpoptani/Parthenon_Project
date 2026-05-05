@@ -1,0 +1,337 @@
+CONTEXT:
+We are analyzing the Parthenon-VIBE AMR benchmark from the paper:
+"Characterizing Adaptive Mesh Refinement on Heterogeneous Platforms with Parthenon-VIBE."
+
+The paper studies Parthenon performance on heterogeneous CPU/GPU systems using:
+- CPU: 96-core Intel Sapphire Rapids (SPR)
+- GPU: NVIDIA H100
+- Benchmark: Parthenon-VIBE / Burgers benchmark
+- Metric: Figure of Merit (FOM), measured as zone-cycles/sec, And Total Time and Memory consumed
+
+Key high-level findings from the paper:
+1. GPUs perform well for large mesh blocks and enough work per kernel.
+2. GPU performance collapses for small MeshBlockSize and deeper AMR levels.
+3. The main bottlenecks are serial CPU-side work, ghost-zone communication, buffer packing/unpacking, load balancing, and AMR metadata management.
+4. Increasing MPI ranks per GPU improves performance by reducing host-side serial bottlenecks, but GPU memory limits how many ranks can be used.
+5. CPU performance scales more smoothly with rank count because it has much larger memory capacity and many CPU cores.
+
+Below are the additional experimental results collected while exploring the paper.
+
+============================================================
+RESULT 2: Mesh Size Scaling
+Configuration: X, MeshBlockSize = 16, AMR Levels = 3
+Metric: FOM = zone-cycles/sec
+============================================================
+
+Mesh Size | 8 H100       | 4 H100       | 1 H100       | 96 SPR       | 8 H100 Best Rank | 4 H100 Best Rank | 1 H100 Best Rank
+64        | 58,800,000   | 38,400,000   | 17,700,000   | 12,000,000   | 67,200,000       | 38,400,000       | 29,900,000
+96        | 41,100,000   | 28,100,000   | 12,400,000   | 12,500,000   | 41,100,000       | 28,100,000       | 26,900,000
+128       | 46,500,000   | 29,500,000   | 12,100,000   | 13,800,000   | 50,400,000       | 41,600,000       | 29,500,000
+160       | 33,000,000   | 21,500,000   | OOM          | 13,100,000   | 33,000,000       | 21,500,000       | OOM
+192       | 21,200,000   | 15,200,000   | OOM          | 12,400,000   | 21,200,000       | 15,200,000       | OOM
+256       | 13,600,000   | 9,610,000    | OOM          | 12,200,000   | 13,600,000       | 9,610,000        | OOM
+
+Observation:
+Performance generally degrades as mesh size increases because communication and serial management overheads grow. CPU performance is relatively stable, while GPU performance is more sensitive to larger mesh sizes. One H100 runs out of memory for larger mesh sizes.
+
+============================================================
+RESULT 3: MeshBlockSize Scaling
+Configuration: Mesh Size = 128, AMR Levels = 3
+Metric: FOM = zone-cycles/sec
+============================================================
+
+MeshBlockSize | 8 H100      | 4 H100      | 1 H100      | 96 SPR      | 1 H100 Best Rank | 4 H100 Best Rank | 8 H100 Best Rank
+64            | 9.62E+08    | 5.53E+08    | OOM         | 2.52E+07    | OOM              | 6.23E+08         | 9.62E+08
+32            | 3.83E+08    | 2.23E+08    | 8.16E+07    | 2.05E+07    | 1.06E+08         | 2.87E+08         | 4.02E+08
+16            | 4.65E+07    | 2.95E+07    | 1.21E+07    | 1.38E+07    | 2.95E+07         | 4.16E+07         | 5.04E+07
+8             | 1.88E+06    | 1.14E+06    | 5.16E+05    | 3.90E+06    | 2.31E+06         | 1.47E+06         | 1.88E+06
+4             | 9.09E+04    | 5.09E+04    | OOM         | 1.10E+06    | OOM              | 9.70E+04         | 9.09E+04
+
+Observation:
+GPU performance collapses as MeshBlockSize decreases. For MeshBlockSize = 8 and 4, the 96-core CPU beats GPU configurations. This supports the paper’s claim that fine-grained AMR causes severe GPU underutilization and high communication overhead.
+
+============================================================
+RESULT 4: AMR Level Scaling
+Configuration: Mesh Size = 128, MeshBlockSize = 16
+Metric: FOM = zone-cycles/sec
+============================================================
+
+Levels | 8 H100      | 4 H100      | 1 H100      | 96 SPR      | 1 H100 Best Rank | 4 H100 Best Rank | 8 H100 Best Rank
+1      | 1.00E+08    | 5.88E+07    | 2.61E+07    | 1.34E+07    | 3.52E+07         | 1.02E+08         | 1.38E+08
+2      | 6.24E+07    | 4.00E+07    | 1.78E+07    | 1.30E+07    | 3.22E+07         | 5.66E+07         | 7.54E+07
+3      | 4.65E+07    | 2.95E+07    | 1.21E+07    | 1.38E+07    | 2.95E+07         | 4.16E+07         | 5.04E+07
+4      | 1.66E+07    | 1.11E+07    | OOM         | 1.14E+07    | OOM              | 1.11E+07         | 1.66E+07
+
+Observation:
+Increasing AMR levels hurts GPU performance much more than CPU performance. CPU performance remains relatively stable, while GPU FOM drops sharply with deeper AMR. This indicates that deeper AMR increases serial overhead, metadata management, communication, and irregularity.
+
+============================================================
+RESULT 5: GPU Rank Scaling Normalized to 96-core SPR
+Metric: FOM normalized to 96 SPR = 1.0
+============================================================
+
+Configuration | 96 SPR | 1 H100 | 2 ranks | 4 ranks | 8 ranks | 12 ranks | 16 ranks
+128, 32, 3    | 1.00   | 3.98   | 4.05    | 4.41    | 4.76    | 5.17     | 4.63
+128, 16, 3    | 1.00   | 0.877  | 1.10    | 1.38    | 1.62    | 2.14     | 1.86
+128, 8, 3     | 1.00   | 0.132  | 0.198   | 0.274   | 0.374   | 0.592    | OOM
+128, 8, 2     | 1.00   | 0.274  | 0.413   | 0.621   | 1.01    | 1.21     | 1.38
+128, 8, 1     | 1.00   | 0.591  | 0.849   | 1.05    | 1.67    | 1.86     | 1.99
+
+Observation:
+Increasing MPI ranks per GPU improves performance substantially, especially for small MeshBlockSize. However, for the hardest case, 128, 8, 3, even 12 GPU ranks only reaches 0.592x of CPU performance, and 16 ranks causes OOM. This shows the trade-off: more ranks reduce serial bottlenecks but increase GPU memory pressure.
+
+============================================================
+RESULT 7: Function-Level Runtime Breakdown
+Configuration: Mesh Size = 128, MeshBlockSize = 8, AMR Levels = 3
+Metric: Time in seconds
+============================================================
+
+Function                        | GPU 1 rank | GPU 6 rank | GPU 8 rank | CPU 16 rank | CPU 48 rank | CPU 96 rank
+Initialise                      | 18.62      | 8.41       | 5.17       | 12.46       | 10.89       | 11.64
+EstimateTimestep                | 45.53      | 8.24       | 7.50       | 1.91        | 0.80        | 0.51
+ReceiveBoundBufs                | 82.78      | 247.57     | 187.49     | 175.05      | 41.72       | 76.71
+CalculateFluxes                 | 170.76     | 42.16      | 40.15      | 187.18      | 64.33       | 37.79
+WeightedSumData                 | 187.32     | 47.45      | 46.42      | 87.58       | 30.13       | 20.25
+SendBoundBufs                   | 546.70     | 101.47     | 79.54      | 155.59      | 59.65       | 38.77
+SetBounds                       | 502.20     | 78.04      | 57.87      | 227.08      | 81.06       | 47.80
+FillDerived                     | 105.24     | 20.65      | 19.90      | 4.83        | 1.78        | 1.13
+FluxDivergence                  | 0.69       | 0.14       | 0.12       | 15.86       | 6.28        | 5.03
+StartReceiveBoundBufs           | 25.10      | 5.60       | 4.29       | 1.95        | 0.74        | 0.50
+Refinement::Tag                 | 75.41      | 13.87      | 12.12      | 1.72        | 0.58        | 0.32
+RedistributeAndRefineMeshBlocks | 1173.77    | 359.73     | 263.07     | 203.73      | 76.67       | 67.26
+UpdateMeshBlockTree             | 0.39       | 25.75      | 22.36      | 38.90       | 24.62       | 16.87
+
+Observation:
+The largest GPU bottleneck is RedistributeAndRefineMeshBlocks, followed by SendBoundBufs and SetBounds. Increasing GPU ranks from 1 to 8 reduces many serial bottlenecks significantly, but ReceiveBoundBufs remains expensive. CPU scales these functions more smoothly with more ranks.
+
+============================================================
+RESULT 8: Kernel vs Non-Kokkos Runtime
+Configuration: Mesh Size = 128, MeshBlockSize = 8, AMR Levels = 3
+Metric: Time in seconds
+============================================================
+
+Metric                                      | GPU 1 rank | GPU 6 rank | GPU 8 rank | CPU 16 rank | CPU 48 rank | CPU 96 rank
+Total Execution Time incl. Kokkos + non-Kokkos | 2782.17 | 870.65 | 690.20 | 1034.72 | 348.21 | 278.87
+Total Kernel Time                           | 122.69     | 34.93      | 31.96      | 626.59      | 221.78      | 137.46
+Time Outside Kokkos Kernels                 | 2659.48    | 835.72     | 658.24     | 408.13      | 126.44      | 141.41
+
+Observation:
+For GPU runs, most time is outside Kokkos kernels, meaning the GPU is not the main bottleneck. The bottleneck is CPU-side serial work and communication orchestration. For CPU runs, kernel time dominates more strongly and scales with core count.
+
+============================================================
+RESULT 9: CPU Strong Scaling
+Configuration: Mesh Size = 128, MeshBlockSize = 8, AMR Levels = 3
+Metric: Time in seconds
+============================================================
+
+Cores               | 4       | 8       | 16      | 32      | 48      | 56      | 64      | 72      | 96
+Total Time          | 4111.13 | 2082.96 | 1034.72 | 541.94  | 348.21  | 304.14  | 279.32  | 279.73  | 271.86
+Kernel Time         | 2592.82 | 1290.98 | 626.59  | 326.48  | 221.78  | 197.73  | 177.55  | 163.49  | 140.13
+Serial Portion Time | 1518.30 | 791.98  | 408.13  | 215.46  | 126.44  | 106.41  | 101.77  | 116.24  | 131.73
+
+Observation:
+CPU scales well up to around 64 cores. After that, total time flattens because the serial portion stops improving and slightly increases at 72 and 96 cores, likely due to synchronization, MPI collectives, or contention.
+
+============================================================
+RESULT 10: Kernel Portion Inside Key Functions
+Configuration: Mesh Size = 128, MeshBlockSize = 8, AMR Levels = 3
+Metric: Time in seconds
+============================================================
+
+Function: SetBounds
+Portion           | 1GPU1CPU | 1GPU6CPU | 1GPU8CPU | 16CPU  | 48CPU | 96CPU
+Total             | 502.20   | 78.04    | 57.87    | 227.08 | 81.06 | 47.80
+Unpacking Kernel  | 8.84     | 1.74     | 1.42     | 188.35 | 67.57 | 40.04
+
+Function: SendBoundBufs
+Portion           | 1GPU1CPU | 1GPU6CPU | 1GPU8CPU | 16CPU  | 48CPU | 96CPU
+Total             | 546.70   | 101.47   | 79.54    | 155.59 | 59.65 | 38.77
+Packing Kernel    | 4.34     | 0.85     | 0.79     | 113.14 | 41.35 | 25.48
+
+Function: CalculateFluxes
+Portion           | 1GPU1CPU | 1GPU6CPU | 1GPU8CPU | 16CPU  | 48CPU | 96CPU
+Total             | 170.76   | 42.16    | 40.15    | 187.18 | 64.33 | 37.79
+Sum of two Kernels | 25.66    | 9.13     | 8.82     | 182.86 | 62.69 | 36.83
+
+Function: WeightedSumData
+Portion           | 1GPU1CPU | 1GPU6CPU | 1GPU8CPU | 16CPU | 48CPU | 96CPU
+Total             | 187.32   | 47.45    | 46.42    | 87.58 | 30.13 | 20.25
+Kernel            | 6.18     | 1.16     | 0.96     | 82.79 | 28.27 | 18.75
+
+Function: FillDerived
+Portion           | 1GPU1CPU | 1GPU6CPU | 1GPU8CPU | 16CPU | 48CPU | 96CPU
+Total             | 105.24   | 20.65    | 19.90    | 4.83  | 1.78  | 1.13
+Kernel            | 0.26     | 0.10     | 0.10     | 2.03  | 0.78  | 0.49
+
+Observation:
+On GPU, the actual GPU kernels inside these functions are very small compared to total function time. For example, SetBounds takes 502.2 s in 1GPU1CPU, but the unpacking kernel is only 8.84 s. This confirms that GPU slowdown is dominated by non-kernel CPU-side logic, synchronization, metadata, communication setup, and buffer management.
+
+============================================================
+RESULT 11: Memory Breakdown
+Configuration: Mesh Size = 128, MeshBlockSize = 8, AMR Levels = 3
+Metric: GB
+============================================================
+
+Description                | CPU 12 ranks | CPU 16 ranks | CPU 48 ranks | CPU 96 ranks | GPU 6 ranks | GPU 8 ranks | GPU 12 ranks
+Application Total          | 76.93        | 79.52        | 100.17       | 121.02       | 68.00       | 71.00       | 75.50
+Kokkos Total Memory        | 66.93        | 67.23        | 68.60        | 78.00        | 66.44       | 66.61       | 66.93
+MPI Buffer + Other Memory  | 10.00        | 12.29        | 31.57        | 43.02        | 1.56        | 4.39        | 8.57
+
+Alternate ordering:
+
+Description                | GPU 6 | GPU 8 | GPU 12 | CPU 12 | CPU 16 | CPU 48 | CPU 96
+Kokkos Total Memory        | 66.44 | 66.61 | 66.93  | 66.93  | 67.23  | 68.60  | 78.00
+MPI Buffer + Other Memory  | 1.56  | 4.39  | 8.57   | 10.00  | 12.29  | 31.57  | 43.02
+
+Observation:
+Kokkos memory is the dominant fixed memory cost and stays around 66-78 GB for this configuration. MPI buffer and other memory grow with rank count. GPU 12-rank memory reaches 75.5 GB, close to H100 memory capacity, which explains why higher rank counts can cause OOM. Reducing Kokkos memory footprint is important because it would allow more ranks per GPU and reduce serial bottlenecks.
+
+============================================================
+OVERALL TAKEAWAYS FOR THE AGENT
+============================================================
+
+1. The core problem is not simply slow GPU kernels.
+   GPU kernels are often a small fraction of total runtime. The major issue is CPU-side serial overhead, communication orchestration, AMR metadata management, and buffer handling.
+
+2. Smaller MeshBlockSize is the worst case for GPUs.
+   At MeshBlockSize = 8 or 4, GPUs can become slower than the 96-core CPU because there is too little work per block and too much communication/metadata overhead.
+
+3. Deeper AMR levels hurt GPUs more than CPUs.
+   More AMR levels increase refinement complexity, communication, and irregularity. CPUs tolerate this better because they can use many ranks and have much larger memory.
+
+4. More MPI ranks per GPU help, but memory becomes the limiting factor.
+   Increasing ranks improves performance by parallelizing host-side serial work, but memory usage increases due to MPI buffers, Open MPI overheads, and replicated Kokkos/Parthenon data structures.
+
+5. RedistributeAndRefineMeshBlocks, SendBoundBufs, SetBounds, and ReceiveBoundBufs are critical optimization targets.
+   These functions dominate runtime in difficult GPU configurations.
+
+6. For SetBounds, SendBoundBufs, WeightedSumData, and FillDerived, the GPU kernel portion is small compared to the total function time.
+   This suggests that optimizing only CUDA kernels will not solve the full problem. The agent should inspect CPU-side logic, metadata lookups, buffer initialization, fences, MPI progress, and synchronization.
+
+7. CPU scaling is good until around 64 cores, then it flattens.
+   This indicates a serial/synchronization floor even on CPUs.
+
+8. Memory optimization is necessary for better GPU rank scaling.
+   Kokkos memory consumes around 66-78 GB in the hard configuration, leaving limited room for MPI buffers and additional ranks. Reducing temporary/intermediate Kokkos allocations could allow more ranks per GPU and improve performance.
+
+-------------------------------------------
+
+ADDITIONAL RESULTS: Exact Rank Sweep and Best-Rank Selection
+Context:
+These tables expand the earlier Results.txt with the exact rank-sweep data used to determine the “best rank” configurations. Unless otherwise noted, rank counts are total MPI ranks for the whole GPU configuration. “No MPS” corresponds to the baseline one-rank-per-GPU run: 8 total ranks on 8 H100, 4 total ranks on 4 H100, and 1 rank on 1 H100.
+
+Metric:
+FOM = zone-cycles/sec. Higher is better.
+
+============================================================
+TABLE R-A: Mesh Size Sweep — Full Rank-Sweep Results
+Fixed: MeshBlockSize = 16, AMR Levels = 3
+============================================================
+
+Mesh Size | 8 H100 | 4 H100 | 1 H100 | 96 SPR | 8 H100-16 ranks | 8 H100-no MPS | 8 H100-best | 4 H100-32 ranks | 4 H100-16 ranks | 4 H100-8 ranks | 4 H100-4 ranks | 4 H100-no MPS | 4 H100-best | 1 H100-2 ranks | 1 H100-4 ranks | 1 H100-8 ranks | 1 H100-12 ranks | 1 H100-16 ranks | 1 H100-24 ranks | 1 H100-32 ranks
+64  | 5.88E+07 | 3.84E+07 | 1.77E+07 | 1.20E+07 | 6.72E+07 | 5.88E+07 | 6.72E+07 | 2.70E+07 | 2.65E+07 | 2.78E+07 | 2.14E+07 | 3.84E+07 | 3.84E+07 | 1.96E+07 | 2.23E+07 | 2.37E+07 | 2.99E+07 | 2.91E+07 | N/A | 2.69E+07
+96  | 4.11E+07 | 2.81E+07 | 1.24E+07 | 1.25E+07 | 3.80E+07 | 4.11E+07 | 4.11E+07 | 2.33E+07 | 2.70E+07 | 2.32E+07 | 1.80E+07 | 2.81E+07 | 2.81E+07 | 1.43E+07 | 2.01E+07 | 2.52E+07 | 2.69E+07 | 2.60E+07 | 2.29E+07 | 1.89E+07
+128 | 4.65E+07 | 2.95E+07 | 1.21E+07 | 1.38E+07 | 5.04E+07 | 4.65E+07 | 5.04E+07 | 2.29E+07 | 4.16E+07 | 3.84E+07 | 2.27E+07 | 2.95E+07 | 4.16E+07 | 1.52E+07 | 1.90E+07 | 2.23E+07 | 2.95E+07 | 2.56E+07 | OOM | CUDA memory allocation failed
+160 | 3.30E+07 | 2.15E+07 | OOM      | 1.31E+07 | 2.57E+07 | 3.30E+07 | 3.30E+07 | OOM | OOM | OOM | OOM | 2.15E+07 | 2.15E+07 | OOM | OOM | OOM | OOM | OOM | OOM | OOM
+192 | 2.12E+07 | 1.52E+07 | OOM      | 1.24E+07 | 9.08E+06 | 2.12E+07 | 2.12E+07 | OOM | OOM | OOM | OOM | 1.52E+07 | 1.52E+07 | OOM | OOM | OOM | OOM | OOM | OOM | OOM
+256 | 1.36E+07 | 9.61E+06 | OOM      | 1.22E+07 | 6.01E+06 | 1.36E+07 | 1.36E+07 | OOM | OOM | OOM | OOM | 9.61E+06 | 9.61E+06 | OOM | OOM | OOM | OOM | OOM | OOM | OOM
+
+Best-rank summary:
+Mesh Size | 8 H100 best config | 4 H100 best config | 1 H100 best config
+64  | 16 total ranks, FOM 6.72E+07 | No MPS / 4 total ranks, FOM 3.84E+07 | 12 total ranks, FOM 2.99E+07
+96  | No MPS / 8 total ranks, FOM 4.11E+07 | No MPS / 4 total ranks, FOM 2.81E+07 | 12 total ranks, FOM 2.69E+07
+128 | 16 total ranks, FOM 5.04E+07 | 16 total ranks, FOM 4.16E+07 | 12 total ranks, FOM 2.95E+07
+160 | No MPS / 8 total ranks, FOM 3.30E+07 | No MPS / 4 total ranks, FOM 2.15E+07 | No valid 1-H100 run; OOM
+192 | No MPS / 8 total ranks, FOM 2.12E+07 | No MPS / 4 total ranks, FOM 1.52E+07 | No valid 1-H100 run; OOM
+256 | No MPS / 8 total ranks, FOM 1.36E+07 | No MPS / 4 total ranks, FOM 9.61E+06 | No valid 1-H100 run; OOM
+
+Key observation:
+For mesh-size scaling, best rank is not monotonic. 8 H100 benefits from 16 total ranks at Mesh Size 64 and 128, but the no-MPS one-rank-per-GPU configuration wins at larger mesh sizes. 4 H100 mostly prefers no MPS except at Mesh Size 128, where 16 total ranks is much better. 1 H100 prefers 12 ranks when it fits in memory.
+
+============================================================
+TABLE R-B: MeshBlockSize Sweep — Full Rank-Sweep Results
+Fixed: Mesh Size = 128, AMR Levels = 3
+============================================================
+
+MeshBlockSize | 8 H100 | 4 H100 | 1 H100 | 96 SPR | 8 H100-16 ranks | 8 H100-no MPS | 8 H100-best | 4 H100-32 ranks | 4 H100-16 ranks | 4 H100-8 ranks | 4 H100-4 ranks | 4 H100-no MPS | 4 H100-best | 1 H100 baseline | 1 H100-2 ranks | 1 H100-4 ranks | 1 H100-8 ranks | 1 H100-12 ranks | 1 H100-16 ranks | 1 H100-24 ranks | 1 H100-32 ranks
+64 | 9.62E+08 | 5.53E+08 | OOM      | 2.52E+07 | 8.31E+08 | 9.62E+08 | 9.62E+08 | 6.03E+08 | 6.23E+08 | 6.11E+08 | 5.40E+08 | 5.53E+08 | 6.23E+08 | OOM | CUDA memory allocation failed | CUDA memory allocation failed | CUDA memory allocation failed | OOM | CUDA memory allocation failed | CUDA memory allocation failed | CUDA memory allocation failed
+32 | 3.83E+08 | 2.23E+08 | 8.16E+07 | 2.05E+07 | 4.02E+08 | 3.83E+08 | 4.02E+08 | 2.48E+08 | 2.87E+08 | 2.72E+08 | 1.91E+08 | 2.23E+08 | 2.87E+08 | 8.16E+07 | 8.31E+07 | 9.05E+07 | 9.75E+07 | 1.06E+08 | 9.50E+07 | 2.70E+07 | CUDA memory allocation failed
+16 | 4.65E+07 | 2.95E+07 | 1.21E+07 | 1.38E+07 | 5.04E+07 | 4.65E+07 | 5.04E+07 | 2.29E+07 | 4.16E+07 | 3.84E+07 | 2.27E+07 | 2.95E+07 | 4.16E+07 | 1.21E+07 | 1.52E+07 | 1.90E+07 | 2.23E+07 | 2.95E+07 | 2.56E+07 | OOM | CUDA memory allocation failed
+8  | 1.88E+06 | 1.14E+06 | 5.16E+05 | 3.90E+06 | 1.23E+06 | 1.88E+06 | 1.88E+06 | 6.42E+05 | 6.49E+05 | 1.47E+06 | 1.02E+06 | 1.14E+06 | 1.47E+06 | 5.16E+05 | 7.73E+05 | 1.07E+06 | 1.46E+06 | 2.31E+06 | OOM | OOM | OOM
+4  | 9.09E+04 | 5.09E+04 | OOM      | 1.10E+06 | OOM | 9.09E+04 | 9.09E+04 | OOM | OOM | 9.70E+04 | 5.20E+04 | 5.09E+04 | 9.70E+04 | OOM | OOM | OOM | OOM | OOM | OOM | OOM | OOM
+
+Best-rank summary:
+MeshBlockSize | 8 H100 best config | 4 H100 best config | 1 H100 best config
+64 | No MPS / 8 total ranks, FOM 9.62E+08 | 16 total ranks, FOM 6.23E+08 | No valid 1-H100 run; OOM/fail
+32 | 16 total ranks, FOM 4.02E+08 | 16 total ranks, FOM 2.87E+08 | 12 total ranks, FOM 1.06E+08
+16 | 16 total ranks, FOM 5.04E+07 | 16 total ranks, FOM 4.16E+07 | 12 total ranks, FOM 2.95E+07
+8  | No MPS / 8 total ranks, FOM 1.88E+06 | 8 total ranks, FOM 1.47E+06 | 12 total ranks, FOM 2.31E+06
+4  | No MPS / 8 total ranks, FOM 9.09E+04 | 8 total ranks, FOM 9.70E+04 | No valid 1-H100 run; OOM
+
+Key observation:
+The best rank setting depends strongly on MeshBlockSize. Moderate block sizes, especially 32 and 16, benefit from extra ranks/MPS. Very small blocks become dominated by overhead and memory pressure; increasing ranks does not always help and often causes OOM.
+
+============================================================
+TABLE R-C: AMR Level Sweep — Full Rank-Sweep Results
+Fixed: Mesh Size = 128, MeshBlockSize = 16
+============================================================
+
+Levels | 8 H100 | 4 H100 | 1 H100 | 96 SPR | 8 H100-16 ranks | 8 H100-no MPS | 8 H100-best | 4 H100-32 ranks | 4 H100-16 ranks | 4 H100-8 ranks | 4 H100-4 ranks | 4 H100-no MPS | 4 H100-best | 1 H100 baseline | 1 H100-2 ranks | 1 H100-4 ranks | 1 H100-8 ranks | 1 H100-12 ranks | 1 H100-16 ranks | 1 H100-32 ranks | 1 H100-48 ranks
+1 | 1.00E+08 | 5.88E+07 | 2.61E+07 | 1.34E+07 | 1.38E+08 | 1.00E+08 | 1.38E+08 | 1.02E+08 | 9.50E+07 | 7.99E+07 | 5.21E+07 | 5.88E+07 | 1.02E+08 | 2.61E+07 | 2.35E+07 | 3.36E+07 | 3.67E+07 | 3.32E+07 | 3.48E+07 | 3.52E+07 | 3.10E+07
+2 | 6.24E+07 | 4.00E+07 | 1.78E+07 | 1.30E+07 | 7.54E+07 | 6.24E+07 | 7.54E+07 | 4.81E+07 | 5.66E+07 | 5.30E+07 | 3.31E+07 | 4.00E+07 | 5.66E+07 | 1.78E+07 | 1.95E+07 | 2.47E+07 | 1.01E+07 | 2.70E+07 | 3.22E+07 | 2.18E+07 | 2.15E+07
+3 | 4.65E+07 | 2.95E+07 | 1.21E+07 | 1.38E+07 | 5.04E+07 | 4.65E+07 | 5.04E+07 | 2.29E+07 | 4.16E+07 | 3.84E+07 | 2.27E+07 | 2.95E+07 | 4.16E+07 | 1.21E+07 | 1.52E+07 | 1.90E+07 | 2.23E+07 | 2.95E+07 | 2.56E+07 | OOM | OOM
+4 | 1.66E+07 | 1.11E+07 | OOM      | 1.14E+07 | 8.53E+06 | 1.66E+07 | 1.66E+07 | Wait time | 3.63E+06 | 1.07E+07 | 8.51E+06 | 1.11E+07 | 1.11E+07 | OOM | OOM | OOM | OOM | OOM | OOM | OOM | OOM
+
+Best-rank summary:
+AMR Levels | 8 H100 best config | 4 H100 best config | 1 H100 best config
+1 | 16 total ranks, FOM 1.38E+08 | 32 total ranks, FOM 1.02E+08 | 8 total ranks, FOM 3.67E+07
+2 | 16 total ranks, FOM 7.54E+07 | 16 total ranks, FOM 5.66E+07 | 16 total ranks, FOM 3.22E+07
+3 | 16 total ranks, FOM 5.04E+07 | 16 total ranks, FOM 4.16E+07 | 12 total ranks, FOM 2.95E+07
+4 | No MPS / 8 total ranks, FOM 1.66E+07 | No MPS / 4 total ranks, FOM 1.11E+07 | No valid 1-H100 run; OOM
+
+Key observation:
+For AMR levels 1-3, 8 H100 generally benefits from 16 total ranks. 4 H100 prefers 32 ranks at Level 1, 16 ranks at Levels 2-3, and no MPS at Level 4. 1 H100 prefers 8-16 ranks when memory permits, but Level 4 is OOM.
+
+-------------------------------------------
+
+Microarchitectural Analysis
+
+============================================================
+TABLE III: GPU Microarchitecture Analysis
+Configuration: Mesh Size = 128, AMR Levels = 3
+Compared MeshBlockSize: B32 vs B16
+Metric: CUDA kernel time during one simulation cycle + GPU hardware utilization metrics
+============================================================
+
+Kernel               | Duration B32 (ms) | Duration B16 (ms) | SM Util B32 (%) | SM Util B16 (%) | SM Occ B32 (%) | SM Occ B16 (%) | Warp Util B32 (%) | Warp Util B16 (%) | BW Util B32 (%) | BW Util B16 (%) | Arith Int B32 (FLOPs/B) | Arith Int B16 (FLOPs/B)
+CalculateFluxes      | 135.0             | 94.9              | 32.3            | 27.9            | 24.1           | 24.2           | 94.1              | 67.6              | 18.5            | 11.2            | 4.3                    | 3.4
+FirstDerivative      | 63.8              | 51.0              | 2.5             | 2.2             | 52.3           | 52.5           | 95.9              | 94.4              | 0.1             | 0.1             | 14.5                   | 18.7
+MassHistory          | 35.6              | 35.7              | 5.6             | 4.0             | 24.2           | 24.1           | 100.0             | 50.0              | 1.8             | 0.8             | 3.1                    | 2.6
+WeightedSumData      | 27.1              | 21.1              | 69.1            | 54.5            | 92.7           | 94.2           | 94.8              | 100.0             | 50.2            | 39.6            | 0.3                    | 0.3
+SendBoundBufs        | 23.7              | 15.9              | 5.5             | 11.3            | 95.7           | 97.9           | 94.4              | 84.3              | 28.5            | 34.2            | 0.0                    | 0.0
+SetBounds            | 20.9              | 20.9              | 12.4            | 14.3            | 51.5           | 50.4           | 94.2              | 88.4              | 22.2            | 21.5            | 0.1                    | 0.1
+FluxDivergence       | 11.9              | 4.9               | 48.5            | 41.6            | 94.5           | 97.5           | 95.0              | 100.0             | 51.2            | 51.8            | 0.6                    | 0.5
+Est.Time.Mesh        | 6.5               | 8.3               | 3.7             | 2.9             | 24.2           | 24.1           | 94.7              | 50.1              | 3.3             | 1.6             | 1.7                    | 1.4
+Prolong.Restr.Loop   | 3.3               | 3.1               | 24.8            | 29.7            | 54.9           | 66.3           | 94.9              | 93.4              | 56.9            | 54.5            | 0.3                    | 0.5
+CalculateDerived     | 1.3               | 0.9               | 39.2            | 46.8            | 36.9           | 41.9           | 94.3              | 74.4              | 54.1            | 37.4            | 0.1                    | 0.1
+Total                | 329.1             | 256.7             | 23.4            | 19.1            | 45.0           | 44.2           | 95.3              | 76.3              | 18.1            | 13.2            | 5.0                    | 5.4
+
+Observation:
+The GPU kernels themselves show poor overall SM utilization, especially when MeshBlockSize decreases from 32 to 16. Total SM utilization drops from 23.4% for B32 to 19.1% for B16. Warp utilization also drops significantly from 95.3% to 76.3%, showing that smaller mesh blocks lead to less effective use of GPU threads.
+
+CalculateFluxes is the dominant GPU kernel by duration. It takes 135.0 ms for B32 and 94.9 ms for B16, making it the largest contributor to CUDA kernel time. However, its SM utilization is only 32.3% for B32 and 27.9% for B16, and its SM occupancy is only about 24% in both cases. This suggests that the kernel is limited by occupancy and inefficient GPU execution rather than raw compute throughput.
+
+The drop in warp utilization for CalculateFluxes is especially important. Warp utilization decreases from 94.1% for B32 to 67.6% for B16. This supports the paper’s argument that smaller mesh blocks create poor mapping between the AMR block structure and CUDA thread/block execution. Many GPU threads become inactive or do not perform useful work.
+
+Memory bandwidth utilization is also low. The total bandwidth utilization is only 18.1% for B32 and 13.2% for B16. This means the kernels are not effectively using H100 HBM bandwidth, even though many of them have low arithmetic intensity and should be memory-sensitive. The likely reason is irregular/sparse memory access patterns and poor spatial locality across mesh blocks.
+
+Several communication-related kernels, such as SendBoundBufs and SetBounds, have very low arithmetic intensity near 0.0 to 0.1 FLOPs/byte. These are mostly data movement kernels. However, their bandwidth utilization is still not close to peak, indicating inefficient memory access behavior rather than pure bandwidth saturation.
+
+WeightedSumData and FluxDivergence have high SM occupancy and relatively high bandwidth utilization compared to other kernels. These kernels appear to map better to the GPU. In contrast, CalculateFluxes, FirstDerivative, MassHistory, and Est.Time.Mesh show very low SM utilization, making them important candidates for deeper GPU-side inspection.
+
+Overall Takeaway:
+The GPU bottleneck has two layers:
+1. At the application level, most runtime is outside Kokkos kernels, dominated by CPU-side orchestration, communication, metadata handling, and AMR management.
+2. Inside the GPU kernels, utilization is still poor. Smaller mesh blocks reduce warp utilization, SM utilization, and bandwidth utilization.
+
+Optimization should therefore not only target CPU-side serial overheads but also the GPU kernel structure. In particular, CalculateFluxes should be inspected for register pressure, CUDA block shape, inactive warps/threads, memory access locality, and whether the Kokkos launch configuration matches the actual MeshBlockSize.

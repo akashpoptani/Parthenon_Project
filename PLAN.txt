@@ -1,0 +1,57 @@
+IMPORTANT: Whatever changes the agent is making in this directory "Parthenon_Project" - they have be recorded in RECORD.md
+
+1. Perform a git commit using credentials in git-credentials file.
+
+2.
+Look at @Parthenon_Project 
+Read all the txt and md files here - Read all the pdfs here
+Understand each component of this repo
+
+3.
+What I want you to do is develop a workflow: (We are creating an artifact so that one with this repo can easily re-run, reproduce the results mentioned in RESULTS.txt and verify if they are correct or not. This workflow or framework has to be very modular and adaptable to running in different settings such as normally, with any profiling tool, with monitoring tools - It should also be adaptable to different Hardware such as Intel CPUs to ARM CPUs - it's okay if we only have support for NVIDIA GPUs though)
+Make run_CPU_template.sh and run_GPU_template.sh are template scripts to run on multi core system or multi - gpu/multi-core system respectively.
+
+4.
+make a directory called configs - you can mention all different configurations like memory, #GPUs, #CPUs, time, Different Mesh Sizes, MeshBlock Sizes, AMR levels, if you want to run with vTune, if you want to run with kokkos-profiling tool (if yes, which one - point to the specific file), if you want to run with NVIDIA nsight systems or compute, if you want to record peak memory usage on CPU and on GPU - separate tags for them.
+
+5.
+Now write a script to run 1 experiment for an example experiment 2 mentioned in RESULTS or experiment 1 in EXPERIMENTS.txt: Mesh Size Scaling
+have a python script that runs all these:
+Fixed parameters:
+- MeshBlockSize = 16
+- AMR Levels = 3
+Swept parameter:
+- Mesh Size = 64, 96
+Resources used:
+- 1 H100 GPU baseline
+- 2 H100 GPUs baseline
+- 2 H100 GPUs - with 2 ranks per GPU - total 4 ranks
+- 16-core SPR CPU baseline
+Only write the script for now - validation and running will be done later
+
+6. Similarily get a support for running
+- 2 H100 GPUs - with 2 ranks per GPU - total 4 ranks
+- 16-core SPR CPU baseline
+for 128, 16, 3
+with intel vTune (for CPU run), NVIDIA Nsight systems and compute from profiling-tools folder (for GPU run), MICA from profiling-tools folder (for CPU only), kokkos-tools kernel timer from kokkos-tools directory (for both CPU and GPU), kokkos-tools memory (for both CPU and GPU)
+Only write the script for now - validation and running will be done later
+
+7.
+Once the previous things are done: (Tools here are vTune, top/htop, perf, MICA, Nsight systems, kokkost-tools kernel timer and memory one) (figure x refers to the figure in paper - we could also use it as TABLE III)
+create a README.md (to run parthenon normally, with vTune, kokkos-profiler, NVIDIA-tools like nsight systems and nsight compute, with perf and MICA, pin tool  ++ All the experiments listed here) based on how SCRATCH.md to perform all experiments on a Lighouse cluster as mention - all experiments are listed in RESULTS.md and Parthenon_Characterised.pdf
+I'm also giving you a list of experiments that are done in EXPERIMENTS.txt
+It should be like 
+Section 1: Running Parthenon
+sec 2: running it with tool 1
+...
+...
+sec 7: running it with tool 6
+sec 8: run this script for getting results for figure 2
+sec 9: run this script for getting results for figure 3
+sec 10: run this script for getting results for figure 4
+...
+...
+sec 16: run this script for getting results for figure 10
+sec 17: run this script for getting results for TABLE III
+
+8. Once this is done, do another git push.

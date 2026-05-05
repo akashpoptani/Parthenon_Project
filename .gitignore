@@ -1,0 +1,49 @@
+# Sensitive files - never commit
+git-credentials
+
+# Build directories
+build/
+build_cpu/
+build_gpu/
+parthenon/build*
+parthenon/build_cpu*
+parthenon/build_gpu*
+kokkos-tools/build/
+kokkos-tools/install/
+kokkos-tools/myBuild/
+
+# Output / runtime artifacts
+results/
+runs/
+logs/
+*.log
+*.dat
+*.json
+*.csv
+*.tsv
+*.nsys-rep
+*.qdrep
+*.sqlite
+*.ncu-rep
+*.hst
+vtuneresults*/
+itypes_*.out
+itypes_*.txt
+hostfile
+core.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

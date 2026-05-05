@@ -1,0 +1,408 @@
+LIST OF EXPERIMENTS AND RESOURCES USED
+
+Paper/system context:
+- Benchmark: Parthenon-VIBE / Burgers AMR benchmark
+- Main metric: Figure of Merit (FOM), zone-cycles/sec
+- CPU resource: 1 node, 96 Intel Sapphire Rapids CPU cores / ranks
+- GPU resource: up to 8 NVIDIA H100 GPUs on 1 node
+- Main comparison: CPU-only runs vs GPU runs with different GPU counts and MPI rank counts
+- The paper’s methodology uses one CPU-GPU node with 96 SPR cores and up to 8 H100 GPUs for the single-node experiments. :contentReference[oaicite:0]{index=0}
+
+============================================================
+EXPERIMENT 1: Mesh Size Scaling
+============================================================
+
+Goal:
+Study how performance changes as total mesh size increases.
+
+Fixed parameters:
+- MeshBlockSize = 16
+- AMR Levels = 3
+
+Swept parameter:
+- Mesh Size = 64, 96, 128, 160, 192, 256
+
+Resources used:
+- 1 H100 GPU baseline
+- 4 H100 GPUs baseline
+- 8 H100 GPUs baseline
+- 96-core SPR CPU baseline
+- 1 H100 with best-rank configuration
+- 4 H100 with best-rank configuration
+- 8 H100 with best-rank configuration
+
+Notes:
+- Baseline GPU runs appear to use one MPI rank per GPU.
+- Best-rank runs use the empirically best MPI rank count for that GPU configuration.
+- 1 H100 goes OOM for larger mesh sizes: 160, 192, 256.
+
+============================================================
+EXPERIMENT 2: MeshBlockSize Scaling
+============================================================
+
+Goal:
+Study how performance changes as MeshBlockSize decreases.
+
+Fixed parameters:
+- Mesh Size = 128
+- AMR Levels = 3
+
+Swept parameter:
+- MeshBlockSize = 64, 32, 16, 8, 4
+
+Resources used:
+- 1 H100 GPU baseline
+- 4 H100 GPUs baseline
+- 8 H100 GPUs baseline
+- 96-core SPR CPU baseline
+- 1 H100 with best-rank configuration
+- 4 H100 with best-rank configuration
+- 8 H100 with best-rank configuration
+
+Notes:
+- This is the key experiment showing GPU collapse for fine-grained AMR.
+- At MeshBlockSize = 8 and 4, CPU outperforms GPU configurations.
+- Some GPU configurations go OOM, especially 1 H100 at MeshBlockSize = 64 and 4.
+
+============================================================
+EXPERIMENT 3: AMR Level Scaling
+============================================================
+
+Goal:
+Study how deeper AMR hierarchies affect CPU and GPU performance.
+
+Fixed parameters:
+- Mesh Size = 128
+- MeshBlockSize = 16
+
+Swept parameter:
+- AMR Levels = 1, 2, 3, 4
+
+Resources used:
+- 1 H100 GPU baseline
+- 4 H100 GPUs baseline
+- 8 H100 GPUs baseline
+- 96-core SPR CPU baseline
+- 1 H100 with best-rank configuration
+- 4 H100 with best-rank configuration
+- 8 H100 with best-rank configuration
+
+Notes:
+- CPU performance remains relatively stable as AMR levels increase.
+- GPU performance drops sharply with deeper AMR.
+- 1 H100 goes OOM at AMR Level = 4.
+
+============================================================
+EXPERIMENT 4: GPU Rank Scaling
+============================================================
+
+Goal:
+Study whether increasing MPI ranks per GPU improves GPU performance.
+
+Configurations tested:
+- 128, 32, 3
+- 128, 16, 3
+- 128, 8, 3
+- 128, 8, 2
+- 128, 8, 1
+
+Metric:
+- FOM normalized to 96-core SPR CPU = 1.0
+
+Resources used:
+- 96-core SPR CPU baseline
+- 1 H100 with 1 MPI rank
+- 1 H100 with 2 MPI ranks
+- 1 H100 with 4 MPI ranks
+- 1 H100 with 8 MPI ranks
+- 1 H100 with 12 MPI ranks
+- 1 H100 with 16 MPI ranks
+
+Notes:
+- Increasing ranks per GPU generally improves performance.
+- For difficult AMR cases, performance remains below CPU even with more ranks.
+- For configuration 128, 8, 3, 16 GPU ranks causes OOM.
+- 12 ranks per GPU is often close to the practical sweet spot before memory pressure becomes severe.
+
+============================================================
+EXPERIMENT 5: Function-Level Runtime Breakdown
+============================================================
+
+Goal:
+Identify which Parthenon functions dominate runtime.
+
+Fixed parameters:
+- Mesh Size = 128
+- MeshBlockSize = 8
+- AMR Levels = 3
+
+Resources used:
+- GPU: 1 H100 with 1 MPI rank
+- GPU: 1 H100 with 6 MPI ranks
+- GPU: 1 H100 with 8 MPI ranks
+- CPU: 16 SPR CPU ranks
+- CPU: 48 SPR CPU ranks
+- CPU: 96 SPR CPU ranks
+
+Functions measured:
+- Initialise
+- EstimateTimestep
+- ReceiveBoundBufs
+- CalculateFluxes
+- WeightedSumData
+- SendBoundBufs
+- SetBounds
+- FillDerived
+- FluxDivergence
+- StartReceiveBoundBufs
+- Refinement::Tag
+- RedistributeAndRefineMeshBlocks
+- UpdateMeshBlockTree
+
+Notes:
+- RedistributeAndRefineMeshBlocks is the largest GPU bottleneck.
+- SendBoundBufs and SetBounds are also major GPU bottlenecks.
+- More GPU ranks reduce many serial bottlenecks.
+- ReceiveBoundBufs remains expensive even with more ranks.
+
+============================================================
+EXPERIMENT 6: Kernel Time vs Time Outside Kokkos Kernels
+============================================================
+
+Goal:
+Separate actual Kokkos/GPU kernel time from non-kernel CPU-side overhead.
+
+Fixed parameters:
+- Mesh Size = 128
+- MeshBlockSize = 8
+- AMR Levels = 3
+
+Resources used:
+- GPU: 1 H100 with 1 MPI rank
+- GPU: 1 H100 with 6 MPI ranks
+- GPU: 1 H100 with 8 MPI ranks
+- CPU: 16 SPR CPU ranks
+- CPU: 48 SPR CPU ranks
+- CPU: 96 SPR CPU ranks
+
+Measured components:
+- Total execution time
+- Total kernel time
+- Time outside Kokkos kernels
+
+Notes:
+- GPU runs spend most time outside Kokkos kernels.
+- Example: 1 H100 / 1 rank total time is 2782.17 s, but kernel time is only 122.69 s.
+- This proves the main GPU bottleneck is not CUDA kernel execution alone; it is host-side orchestration, communication, metadata, and synchronization.
+
+============================================================
+EXPERIMENT 7: CPU Strong Scaling
+============================================================
+
+Goal:
+Study how CPU-only execution scales with more CPU cores/ranks.
+
+Fixed parameters:
+- Mesh Size = 128
+- MeshBlockSize = 8
+- AMR Levels = 3
+
+Swept resource:
+- CPU ranks/cores = 4, 8, 16, 32, 48, 56, 64, 72, 96
+
+Resources used:
+- SPR CPU-only node
+- Up to 96 CPU cores/ranks
+
+Measured components:
+- Total time
+- Kernel time
+- Serial portion time
+
+Notes:
+- CPU scales well up to around 64 cores.
+- After 64 cores, total runtime flattens.
+- Serial portion stops improving and slightly increases at high rank counts, likely due to synchronization, contention, or MPI collective overhead.
+
+============================================================
+EXPERIMENT 8: Kernel Portion Inside Key Functions
+============================================================
+
+Goal:
+Measure how much of each key function is actual kernel work versus surrounding overhead.
+
+Fixed parameters:
+- Mesh Size = 128
+- MeshBlockSize = 8
+- AMR Levels = 3
+
+Resources used:
+- GPU: 1 H100 with 1 CPU/rank
+- GPU: 1 H100 with 6 CPU/ranks
+- GPU: 1 H100 with 8 CPU/ranks
+- CPU: 16 SPR CPU ranks
+- CPU: 48 SPR CPU ranks
+- CPU: 96 SPR CPU ranks
+
+Functions analyzed:
+- SetBounds
+- SendBoundBufs
+- CalculateFluxes
+- WeightedSumData
+- FillDerived
+
+Measured portions:
+- Total function time
+- Kernel portion inside the function
+
+Notes:
+- On GPU, the actual kernel portion is tiny compared to total function time.
+- Example: SetBounds on 1GPU1CPU takes 502.2 s total, but unpacking kernel is only 8.84 s.
+- This strongly suggests that optimization should target CPU-side logic, MPI/buffer setup, fences, metadata handling, and synchronization.
+
+============================================================
+EXPERIMENT 9: Memory Breakdown
+============================================================
+
+Goal:
+Understand memory usage as rank count increases.
+
+Fixed parameters:
+- Mesh Size = 128
+- MeshBlockSize = 8
+- AMR Levels = 3
+
+Resources used:
+- CPU: 12 SPR ranks
+- CPU: 16 SPR ranks
+- CPU: 48 SPR ranks
+- CPU: 96 SPR ranks
+- GPU: 1 H100 with 6 ranks
+- GPU: 1 H100 with 8 ranks
+- GPU: 1 H100 with 12 ranks
+
+Measured memory components:
+- Application total memory
+- Kokkos total memory
+- MPI buffer + other memory
+
+Notes:
+- Kokkos memory is the dominant fixed memory cost: around 66-78 GB.
+- MPI buffer + other memory grows with rank count.
+- GPU 12-rank memory reaches 75.5 GB, close to H100 memory capacity.
+- This explains why increasing GPU ranks eventually causes OOM.
+- Reducing Kokkos memory footprint is critical to enabling more ranks per GPU.
+
+============================================================
+SUMMARY TABLE: EXPERIMENTS AND RESOURCE CONFIGURATIONS
+============================================================
+
+Experiment | Main sweep | Fixed config | Resources used
+Mesh Size Scaling | Mesh Size = 64 to 256 | MeshBlockSize 16, AMR 3 | 1/4/8 H100, 96 SPR, best-rank GPU configs
+MeshBlockSize Scaling | MeshBlockSize = 64 to 4 | Mesh 128, AMR 3 | 1/4/8 H100, 96 SPR, best-rank GPU configs
+AMR Level Scaling | AMR Levels = 1 to 4 | Mesh 128, Block 16 | 1/4/8 H100, 96 SPR, best-rank GPU configs
+GPU Rank Scaling | GPU ranks = 1,2,4,8,12,16 | Several 128-size configs | 1 H100 with varying MPI ranks, normalized to 96 SPR
+Function Runtime Breakdown | Function timings | 128,8,3 | 1 H100 with 1/6/8 ranks; CPU with 16/48/96 ranks
+Kernel vs Non-Kokkos Time | Runtime decomposition | 128,8,3 | 1 H100 with 1/6/8 ranks; CPU with 16/48/96 ranks
+CPU Strong Scaling | CPU cores = 4 to 96 | 128,8,3 | SPR CPU-only, 4-96 ranks
+Function Kernel Portion | Function internal kernel timing | 128,8,3 | 1 H100 with 1/6/8 ranks; CPU with 16/48/96 ranks
+Memory Breakdown | Rank memory usage | 128,8,3 | GPU 6/8/12 ranks; CPU 12/16/48/96 ranks
+GPU Microarchitecture Analysis | MeshBlockSize = 32 vs 16 | Mesh 128, AMR 3 | 1 H100, Kokkos CUDA backend, Nsight Compute profiling of top 10 kernels
+
+--------------------------
+
+Experiment	Parameter value	8 H100 best rank	4 H100 best rank	1 H100 best rank
+Mesh Size Scaling	64	16 total ranks	4 total ranks, no MPS	12 ranks
+Mesh Size Scaling	96	8 total ranks, no MPS	4 total ranks, no MPS	12 ranks
+Mesh Size Scaling	128	16 total ranks	16 total ranks	12 ranks
+Mesh Size Scaling	160	8 total ranks, no MPS	4 total ranks, no MPS	OOM
+Mesh Size Scaling	192	8 total ranks, no MPS	4 total ranks, no MPS	OOM
+Mesh Size Scaling	256	8 total ranks, no MPS	4 total ranks, no MPS	OOM
+MeshBlockSize Scaling	64	8 total ranks, no MPS	16 total ranks	OOM/allocation failure
+MeshBlockSize Scaling	32	16 total ranks	16 total ranks	12 ranks
+MeshBlockSize Scaling	16	16 total ranks	16 total ranks	12 ranks
+MeshBlockSize Scaling	8	8 total ranks, no MPS	8 total ranks	12 ranks
+MeshBlockSize Scaling	4	8 total ranks, no MPS	8 total ranks	OOM
+AMR Level Scaling	1	16 total ranks	32 total ranks	8 ranks
+AMR Level Scaling	2	16 total ranks	16 total ranks	16 ranks
+AMR Level Scaling	3	16 total ranks	16 total ranks	12 ranks
+AMR Level Scaling	4	8 total ranks, no MPS	4 total ranks, no MPS	OOM
+
+--------------------------
+
+Microarchitectural Analysis on GPU, CPU:
+Goal: (TABLE III)
+Understand why GPU kernels underutilize the H100 even when work is successfully offloaded to CUDA/Kokkos kernels.
+
+Fixed parameters:
+- Mesh Size = 128
+- AMR Levels = 3
+- GPU platform = NVIDIA H100
+- Profiling scope = 10 most time-consuming CUDA/Kokkos kernels
+- Timing scope = CUDA kernel time during a single simulation cycle
+
+Swept parameter:
+- MeshBlockSize = 32
+- MeshBlockSize = 16
+
+Resources used:
+- 1 NVIDIA H100 GPU
+- CPU host attached to the H100 node
+- Kokkos CUDA backend
+- NVIDIA Nsight Compute profiler
+
+Metrics collected:
+- CUDA kernel duration in milliseconds
+- SM utilization
+- SM occupancy
+- Warp utilization
+- HBM / memory bandwidth utilization
+- Arithmetic intensity in FLOPs/byte
+
+------------------------------------
+
+============================================================
+EXPERIMENT 10: CPU Instruction Opcode Distribution
+============================================================
+
+Goal:
+Characterize the CPU instruction mix for Parthenon-VIBE and separate the behavior of total execution, serial code, and kernel/data-parallel regions.
+
+Fixed parameters:
+- Mesh Size = 128
+- AMR Levels = 3
+- MeshBlockSize values analyzed: 32 and 16
+
+Resources used:
+- CPU-only execution
+- SPR CPU node
+- 16 MPI ranks / CPU ranks
+- No GPU resources used
+
+Profiling / analysis tool:
+- Intel PIN / MICA-style instruction opcode analysis
+
+Measured instruction categories:
+- LD/ST: Load/store instructions
+- VEC: Vector/SIMD instructions
+- FP: Floating-point scalar instructions
+- INT: Integer instructions
+- REG: Register/move-style instructions
+- CTRL: Control-flow instructions
+- OTHER: Remaining instruction classes
+
+Execution portions analyzed:
+- Total: entire CPU execution
+- Serial: code outside Kokkos-style computational kernels / CPU-side orchestration
+- Kernel: data-parallel compute region
+
+Key observations:
+1. Vector/SIMD instructions dominate the Total and Kernel portions for both MeshBlockSize = 32 and MeshBlockSize = 16.
+2. The Kernel portion is highly vectorized, which suggests that the CPU backend is using SIMD efficiently for the main numerical computation.
+3. The Serial portion has a much larger LD/ST fraction than the Kernel portion, indicating that CPU-side orchestration is more memory-access and metadata-management heavy.
+4. The Serial portion also has more INT, CTRL, REG, and OTHER instructions, consistent with loop control, branching, object/metadata traversal, and communication/setup logic.
+5. Reducing MeshBlockSize from 32 to 16 reduces the relative vector-instruction fraction in the Kernel portion and increases the non-vector overhead contribution.
+6. This supports the broader conclusion that smaller mesh blocks make execution less compute-dense and increase overhead from block management, metadata handling, and communication-related control flow.
+
+Resource takeaway:
+This experiment uses only CPU profiling resources and does not require GPUs. It complements the GPU bottleneck studies by showing that the CPU implementation is vectorized in the computational kernels, while the serial/orchestration portion is dominated more by memory and control overhead.

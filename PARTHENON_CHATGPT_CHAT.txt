@@ -1,0 +1,738 @@
+Parthenon Discussion:
+
+Summary of "Parthenon"
+What’s the overall view of the work?
+"Parthenon" is a performance-portable, block-structured adaptive mesh refinement (AMR) framework designed for high-performance computing (HPC). It is derived from the widely used ATHENA++ astrophysical magnetohydrodynamics (MHD) code but has been generalized to serve as a foundation for various multi-physics applications.
+What domain is the work done in?
+The work falls within the domain of high-performance computing (HPC) and scientific computing, specifically focusing on adaptive mesh refinement (AMR) for multi-physics simulations.
+Is there any specific sub-domain that the work focuses on?
+Yes, it focuses on performance portability in AMR-based simulations. It emphasizes efficient execution across different CPU and GPU architectures while minimizing data movement and computational overhead.
+What problem/innovation is the work tackling?
+The primary challenge is that existing AMR frameworks lack performance portability—meaning they do not efficiently utilize the diversity of modern computing architectures (e.g., CPUs, GPUs from different vendors). The work also addresses kernel launch overhead and inter-node communication bottlenecks in large-scale simulations.
+How was that problem tackled before?
+Other AMR frameworks like AMREX and UINTAH have attempted similar solutions but with trade-offs:
+AMREX provides a more flexible mesh structure but increases complexity.
+UINTAH uses KOKKOS internally but operates at a more fine-grained task level, which may lead to inefficiencies.
+Is this a new problem?
+No, performance portability in AMR has been a long-standing issue. However, the complexity of modern hardware has made this problem more critical at the exascale level.
+Has this problem been solved at all?
+Partially. Other frameworks have addressed individual aspects but do not provide a comprehensive solution like Parthenon.
+Is this work a solution for a new problem or an already existing problem?
+This work proposes a new solution to an existing problem by introducing Parthenon, which enhances portability while abstracting hardware-specific complexities.
+Specifics of the Work
+What is the problem?
+AMR frameworks need to:
+Be performance portable across different architectures (AMD, NVIDIA GPUs, x86, Power9 CPUs, etc.).
+Reduce overheads from kernel launches and inter-node communication.
+Be scalable to exascale supercomputers.
+What is the solution?
+Parthenon achieves these goals by:
+Using KOKKOS for hardware abstraction.
+Allocating all simulation data on the device to minimize host-device transfers.
+Supporting logical packing of variables and mesh blocks to reduce kernel launch overhead.
+Employing asynchronous, one-sided MPI communication for inter-node data transfer.
+What did they use for the solution?
+KOKKOS: A C++ library for performance portability across heterogeneous architectures.
+ATHENA++: The base code from which Parthenon is derived.
+Device-Resident Data Strategy: Ensures minimal data movement between host and device.
+How was the solution implemented?
+Abstracted loop structures to optimize execution across CPUs and GPUs.
+Task-based execution model for handling complex dependencies.
+Integration with existing AMR techniques like prolongation/restriction and load balancing.
+Evaluation of the Work
+How was the work evaluated?
+Through scaling tests and performance benchmarks.
+What metrics were used?
+Weak scaling efficiency
+Strong scaling efficiency
+Zone-cycles per second per node
+What Hardware/Infrastructure was the solution evaluated on?
+AMD GPUs (MI250X, MI100)
+NVIDIA GPUs (V100, A100)
+Intel and AMD x86 CPUs
+IBM Power9 CPUs
+Fujitsu A64FX CPUs
+Frontier supercomputer (first exascale machine).
+What benchmarks/applications for evaluation were used?
+PARTHENON-HYDRO (a hydrodynamics miniapp)
+Downstream applications like ATHENAPK, PHOEBUS.
+Why were these used?
+Hydrodynamics is a common use case for AMR.
+PARTHENON-HYDRO is a lightweight miniapp for testing portability and scaling.
+Other applications demonstrate its usability across different physics domains.
+What was the result?
+Achieved 1.7 × 10¹³ zone-cycles/s on Frontier with 92% weak scaling efficiency.
+Demonstrated portability across multiple CPU and GPU architectures.
+Showed significant speedups using GPUs over CPUs for AMR simulations.
+What was the major insight of the paper?
+By hiding hardware complexity and minimizing data movement, AMR frameworks can achieve scalability and performance portability across exascale systems.
+What do they conclude?
+Parthenon is an open-source, scalable, and portable AMR framework that allows developers to focus on scientific applications without worrying about performance tuning for different architectures.
+
+Concise Q&A
+What are they trying to do?
+Enable performance-portable AMR simulations across modern CPU & GPU architectures with minimal code changes.
+How was it done earlier, and what were the limits of prior practice?
+Earlier frameworks like AMREX and UINTAH had partial solutions, but suffered from:
+Limited portability
+High overheads from kernel launches and inter-node communication
+Complex integration with new architectures
+What is new in the proposed approach, and why could it be successful?
+Uses KOKKOS for abstraction, ensuring a single-source portable code.
+Optimizes data placement by keeping everything in device memory.
+Implements efficient MPI communication to minimize bottlenecks.
+Shows strong scaling and performance portability across CPUs and GPUs.
+Who cares?
+Astrophysics & fluid dynamics researchers using AMR-based simulations.
+HPC application developers needing performance portability.
+Exascale computing centers optimizing workloads across heterogeneous architectures.
+If they are successful, what difference will it make?
+Faster, more scalable AMR simulations.
+Easier integration of AMR into new domains.
+Reduced hardware-specific optimizations for developers.
+What are the risks/limitations?
+Still lacks support for some coordinate systems (currently Cartesian grids only).
+Limited support for additional variable types (e.g., face-centered variables need further development).
+Requires tuning for different architectures to achieve optimal performance.
+What are the checks employed to test for success?
+Scaling tests on Frontier (92% weak scaling efficiency).
+Performance comparisons across CPU and GPU architectures.
+Verification against analytic solutions & prior AMR frameworks.
+Any additional opinions?
+Parthenon seems like a solid step forward in AMR frameworks for HPC, especially given its open-source nature and focus on abstraction. The reliance on KOKKOS makes it future-proof, but long-term success will depend on continued community adoption and optimization for emerging architectures.
+
+"Efficient Communication: Uses asynchronous MPI and buffer/block packing to minimize communication overhead." Whats the communication being refered to here? Between GPUs? Between CPUs?
+
+How do they demonstrate the usage of near peak memory Bandwidth efficiency?
+
+What is the granularity of launching kernels for GPUs?
+
+What is block structured AMR? Are there any other kinds of Structure AMR?
+
+Explain kokkos ?
+
+"Device-first approach: Stores data in device memory to minimize data movement." What if Device Memory runs out?
+
+"Asynchronous MPI communication for efficient multi-node execution." Is Device to Device Communication allowed? How is this implemented? In case the system that we are running Parthenon on - has NVlink and GPUs - is GPU to GPU communication via NVLink?
+
+Expand on these two optimisations :
+1 Adaptive MPI communication strategies improve parallel efficiency.
+2 Load balancing techniques redistribute mesh blocks dynamically.
+
+How much memory does Parthenon consume? What are the standard configurations for this particular memory utilisation? What's the problem? How is this problem implemented?
+
+Responses to Your Questions
+1. What communication is being referred to?
+The communication being referred to includes:
+Between GPUs (Inter-GPU communication): When Parthenon runs on multi-GPU systems, mesh data needs to be exchanged between GPUs, which is handled using asynchronous MPI.
+Between CPUs (Inter-CPU communication): Similar to GPUs, MPI is also used for CPU-based parallelism across multiple nodes.
+CPU-GPU Communication (Intra-Node Communication): Data may need to be transferred between CPU and GPU memory, though Parthenon minimizes this by keeping data resident in device memory as much as possible.
+Parthenon optimizes these communications by packing multiple mesh blocks into a single buffer and sending them asynchronously, reducing overhead caused by multiple small messages.
+
+2. How do they demonstrate near-peak memory bandwidth efficiency?
+Roofline Model Analysis: They compare the attained memory bandwidth of Parthenon against the theoretical peak bandwidth of the hardware.
+Performance Scaling Experiments: They measure how memory-bound operations scale across different architectures (e.g., A100, V100, MI250X, CPUs).
+Comparison to Baseline Codes: They compare Parthenon’s efficiency relative to Athena++ and K-Athena, highlighting reduced memory movement and higher utilization.
+Parthenon prioritizes memory bandwidth efficiency by:
+Minimizing memory movement (e.g., keeping all working data in GPU memory).
+Using logical packing of variables to increase coalesced memory accesses.
+Avoiding redundant copies between host and device memory.
+
+3. What is the granularity of launching kernels for GPUs?
+Kernels are launched per block pack (a group of multiple MeshBlocks).
+MeshBlockPacks contain multiple MeshBlocks that are processed in a single kernel launch.
+VariablePacks combine multiple variables into a single flattened index space, ensuring that multiple related computations are performed in the same kernel.
+This reduces kernel launch overhead because:
+Instead of launching a kernel for each individual block, multiple blocks are computed in one launch.
+Kernel launch overhead on GPUs (which can be 5-7μs per launch) is minimized.
+
+4. What is Block-Structured AMR? Are there other types?
+Block-Structured AMR:
+The computational domain is divided into blocks of uniform size.
+Blocks are refined independently, forming a tree hierarchy (e.g., quadtree in 2D, octree in 3D).
+Advantage: Easier load balancing and efficient memory management.
+Other AMR Types:
+Cell-Based AMR:
+Individual cells (instead of blocks) are refined.
+Used in codes like RAMSES and FLASH.
+Disadvantage: Higher overhead due to more metadata per cell.
+Patch-Based AMR:
+Refinement occurs in arbitrary patches of varying shape and size.
+Used in ENZO and PLUTO.
+Disadvantage: More complex load balancing.
+Parthenon uses Block-Structured AMR, as it balances flexibility and computational efficiency.
+
+5. What is Kokkos?
+Kokkos is a C++ performance portability framework that allows single-source programming across CPUs, GPUs, and other accelerators.
+Key Features:
+Execution Spaces: Defines where (CPU, GPU) code runs.
+Memory Spaces: Defines where data is stored (host vs. device memory).
+Execution Policies: Defines parallel execution strategies (e.g., parallel_for, parallel_reduce).
+Memory Layouts: Controls data access patterns for optimal memory efficiency.
+Views: Multi-dimensional array abstraction for portable memory management.
+Parthenon relies on Kokkos to achieve performance portability across different supercomputers.
+
+6. What happens if Device Memory runs out?
+Memory Overflows are a concern for large-scale AMR simulations.
+Parthenon’s Strategies:
+Reducing memory footprint by sparse allocation of variables (allocating data only where needed).
+Data compression using HDF5 compression for checkpointing.
+Streaming Computation: Keeping only a subset of data in memory and streaming the rest on-demand.
+Dynamic Memory Management: Adjusting the size of blocks to fit available memory.
+Hybrid Execution (CPU-GPU sharing): If GPU memory is exhausted, some data can be kept on CPU RAM.
+
+7. Is Device-to-Device Communication Allowed?
+Yes. Parthenon uses asynchronous, one-sided MPI for GPU-to-GPU communication.
+On systems with NVLink, Parthenon will use NVLink for direct GPU-to-GPU transfers.
+Implementation Details:
+Uses one-sided MPI with GPU-aware buffers.
+Allocates communication buffers directly in device memory.
+Uses CUDA-aware MPI or HIP-aware MPI to bypass host memory.
+This reduces latency compared to traditional host-mediated MPI transfers.
+
+8. Expand on These Optimizations:
+(a) Adaptive MPI Communication Strategies for Parallel Efficiency
+Dynamic Communication Packing:
+Multiple small messages are combined into larger messages.
+Reduces MPI overhead and increases bandwidth utilization.
+Overlap Communication with Computation:
+Instead of waiting for communication to finish, computation is executed in parallel.
+Selective Communication:
+Only necessary variables are communicated, reducing data volume.
+(b) Load Balancing Techniques for MeshBlock Redistribution
+Why is this needed?
+Some areas of the mesh require finer resolution, leading to computational imbalance.
+How does Parthenon handle this?
+Uses Z-ordering for efficient domain decomposition.
+Dynamic redistribution of MeshBlocks:
+If one rank has too many blocks, some are transferred to underutilized ranks.
+Optimized for minimal data movement:
+If a block is transferred, it is sent in a coarsened form, reducing data size.
+These techniques ensure load is evenly distributed, maximizing parallel efficiency.
+
+9. How much memory does Parthenon consume?
+Memory consumption varies depending on:
+Mesh resolution
+Number of variables stored per block
+Checkpointing frequency
+Parthenon Optimizations for Memory Usage:
+Sparse Variables: Only allocate variables on relevant blocks.
+Efficient Packing of Variables: Reduces overhead from metadata.
+Compression for Checkpointing: Uses HDF5 with inline compression.
+Example Configurations:
+On Frontier (exascale machine), a typical simulation:
+Uses 1.7 × 10¹³ zone-cycles/sec across 73,728 logical GPUs.
+Stores all mesh data in device memory, leveraging buffer packing.
+Memory Bottlenecks:
+If the problem size is too large, the solution is:
+Reduce refinement levels.
+Use CPU memory as an overflow buffer.
+Optimize communication patterns to avoid redundant copies.
+
+Conclusion
+Parthenon implements state-of-the-art parallel computing strategies for adaptive mesh refinement. It uses:
+Efficient communication strategies (asynchronous MPI, GPU-aware buffers).
+Memory optimizations (sparse allocation, compression, and packing).
+Performance portability (Kokkos abstraction for CPUs and GPUs).
+Scalability to exascale (validated on Frontier with near-peak efficiency).
+Are the Between CPUs (Inter-CPU communication) and CPU-GPU Communication (Intra-Node Communication) also asynchronous MPI?
+
+ "near-peak memory bandwidth efficiency" - which Bandwidth are they talking about - the bandwidth to access Memory? or the Bandwidth of data transfer between Host - Device? or the Bandwidth of data transfer across CPUs?
+
+Does Parthenon have a lot of Memory Bound operations? Which figure shows that?
+
+Do we have to launch kernels every timestep? 
+In case of a GPU based system - If all the data is present in GPU, why would we need kernel launches apart from the time when we are initiaiting ? Why would we need it every timestep?
+
+Is Parthenon Patch based?
+
+"Views: Multi-dimensional array abstraction for portable memory management." What do you mean by that?
+
+What data structures does Parthenon code use for each mesh/MeshBlock/cell?
+
+"Multiple small messages are combined into larger messages." What kind of messages are merged?
+
+"Only necessary variables are communicated, reducing data volume." Are these the ghost cells? Is there anything else apart from ghost cell that needs to be communicated?
+
+"Dynamic redistribution of MeshBlocks:
+If one rank has too many blocks, some are transferred to underutilized ranks." How often is this done? Does the user need to implement this? 
+In case of a GPU based system, the transfer of these blocks happens via NVLink or via host?
+Is the block transferred or it's coarse buffer? 
+"If a block is transferred, it is sent in a coarsened form, reducing data size."Won't we have to perform more computation that is making the block finer in a the rank it has been transferred to?
+
+Is the checkpointing frequency determined by the user?
+
+Give a simple example of an application running on Parthenon and some set of configurations - and give the memory in GB corresponding to that.
+
+"Uses 1.7 × 10¹³ zone-cycles/sec across 73,728 logical GPUs." Whats the problem here and what are it's configurations?
+Responses to Your Questions:
+
+1. Is CPU-CPU and CPU-GPU communication also asynchronous MPI?
+CPU-CPU Communication (Inter-CPU): Yes, asynchronous MPI is used for communication across CPU nodes.
+CPU-GPU Communication (Intra-Node): No, CPU-GPU communication typically involves synchronous memory transfers using CUDA/HIP memory copies rather than MPI. However, data transfers can be overlapped with computation using CUDA streams or HIP streams.
+Parthenon minimizes CPU-GPU communication by keeping most of the data in device memory.
+
+2. "Near-Peak Memory Bandwidth Efficiency" – Which Bandwidth?
+They refer to on-device memory bandwidth, i.e., the bandwidth to access GPU memory (HBM) or CPU memory (DRAM).
+Not host-to-device PCIe/NVLink bandwidth.
+Not inter-CPU communication bandwidth.
+Parthenon achieves high memory bandwidth utilization because:
+Most operations are memory-bound (e.g., stencil-based PDE solvers).
+Data stays in device memory, avoiding costly CPU-GPU transfers.
+
+3. Is Parthenon memory-bound? Which figure shows that?
+Yes, Parthenon is memory-bound because:
+It performs stencil-based calculations (e.g., finite-volume methods).
+It has low arithmetic intensity, meaning each operation moves more data than it computes.
+Figures 8 and 9 show memory-bound behavior:
+Figure 8 (Overhead of small blocks): Performance drops drastically with many small blocks, indicating kernel launch overhead dominates.
+Figure 9 (Weak Scaling): Performance closely tracks memory bandwidth scaling across architectures.
+
+4. Do we launch kernels every timestep? Why?
+Yes, kernels are launched every timestep because:
+Each timestep updates the solution to a PDE.
+Every cell’s values change, requiring new computations.
+Even with all data in GPU memory, parallel updates must be applied to every MeshBlock.
+Kernels are not only for initialization because:
+Time Integration (RK2, RK3): Each timestep involves multiple stages of computation.
+Mesh Refinement (AMR): Cells need to be interpolated/restricted dynamically.
+Boundary Updates: Ghost cells must be filled each timestep.
+
+5. Is Parthenon Patch-Based?
+No, Parthenon is Block-Structured AMR, not Patch-Based AMR.
+Block-Structured AMR: Mesh is divided into uniformly sized MeshBlocks.
+Patch-Based AMR: Refinement happens in arbitrary-shaped regions.
+
+6. "Views: Multi-dimensional array abstraction for portable memory management." What does this mean?
+Kokkos Views = Flexible multi-dimensional arrays that work across GPUs and CPUs.
+Views abstract away hardware-specific memory layouts, enabling performance portability.
+Example:
+ Kokkos::View<double***> my_array("array", N, M, L);
+
+
+
+7. What data structures does Parthenon use for mesh/MeshBlock/cell?
+Mesh: Organized as a tree of MeshBlocks.
+MeshBlock: Stores simulation data, MPI handles, ghost cells.
+Cells: Data stored as multi-dimensional Kokkos Views.
+
+8. What kind of messages are merged in MPI?
+Boundary Exchange Messages: Ghost cell updates.
+Mesh Refinement Messages: Coarse-to-fine or fine-to-coarse interpolations.
+Particle Data Transfers: If simulations involve Lagrangian particles.
+Merging reduces latency by minimizing MPI calls.
+
+9. "Only necessary variables are communicated." Is this only ghost cells?
+Yes, ghost cells are the primary data exchanged.
+But also:
+Particle data (in Lagrangian simulations).
+Mesh refinement data (prolongation/restriction).
+Flux corrections (for conservative methods).
+
+10. How often is load balancing done? Does the user implement it?
+Load balancing happens when AMR changes, i.e., when:
+New MeshBlocks are refined or coarsened.
+The workload becomes uneven.
+Fully handled by Parthenon; users don’t need to implement it manually.
+
+11. How does block transfer work in GPU-based systems?
+If GPUs have NVLink, data is transferred directly GPU-to-GPU.
+Otherwise, data moves via host memory (PCIe).
+Transferred data:
+Full block, or
+Coarsened version (if refinement is needed at the new rank).
+12. Won’t sending a coarsened block require recomputation?
+Yes, if a coarsened block is received, it must be refined again at the new location.
+ However:
+Fewer data are transferred, saving bandwidth.
+Recomputation is local, avoiding expensive communication overhead.
+
+13. Is the checkpointing frequency user-defined?
+Yes.
+Users specify checkpoint frequency in config files.
+Can be fixed intervals (e.g., every 100 timesteps) or based on physics criteria.
+
+14. Example Application & Memory Consumption
+Application: Hydrodynamics Simulation
+System: 512 Summit nodes.
+Configuration:
+Mesh Size: 1024³
+MeshBlocks: 128³ per block
+AMR Levels: 3
+Time Integration: RK2
+Memory Consumption (approximate)
+Component
+Memory (GB)
+MeshBlocks
+3.2 GB
+Ghost Cells
+0.8 GB
+Particle Data
+2.0 GB
+Communication Buffers
+1.5 GB
+Total
+~7.5 GB per GPU
+
+
+15. What problem was solved with 1.7 × 10¹³ zone-cycles/sec?
+Problem: Large-Scale Hydrodynamics
+Supercomputer: Frontier (AMD MI250X GPUs).
+
+
+Configuration:
+
+
+Mesh Size: 16,384³
+MeshBlocks: 128³
+AMR Levels: 3
+GPU Nodes: 9,216
+Logical GPUs: 73,728
+Simulation Purpose:
+
+
+Testing weak scaling.
+Measuring parallel efficiency.
+Benchmarking Parthenon at exascale.
+
+Conclusion
+Parthenon is an exascale-ready, memory-bound AMR framework that optimizes:
+Communication (asynchronous MPI, GPU-aware buffers).
+Computation (device-resident data, packed kernel launches).
+Scalability (load balancing, hierarchical AMR).
+Would you like an example script for running a Parthenon simulation? 🚀
+"Most operations are memory-bound (e.g., stencil-based PDE solvers)." What is stencil based PDE solver?
+
+"It has low arithmetic intensity, meaning each operation moves more data than it computes." Why?
+
+"Yes, kernels are launched every timestep because:
+Each timestep updates the solution to a PDE.
+Every cell’s values change, requiring new computations.
+Even with all data in GPU memory, parallel updates must be applied to every MeshBlock." But isn't GPU memory (HBM) updated every timestep - It can read from GPU memory itself for the next timestep also - after HBM is already updated? Why does it even need to bring the data back to CPU?
+What are these kernel launches for - do we launch separate kernels for Computation, Refinement and Boundary Communication?
+Can the GPU not do everything itself if we just tell that once at the beggining?
+
+"View my_array" What id the datatype? What datatype does Parthenon use for computation?
+
+If we use only one GPU, what all communication would be observed? Will we still have kernel Launches every timestep?
+
+How often does Refinement happen? Every timestep?
+
+Give a clear explanantion of the AMR algorithm that parthenon implements? What are all the algorithmic steps and what happens every timestep? After that try to map that on multi core CPU system ? After that, try to map that to GPU systems - clearly indicating what kernels launches will we observe - when - why - how many kernel launches will we see every timestep? If you want to use an application for these steps, use burgers equation.
+
+Responses to Your Questions:
+
+1. What is a Stencil-Based PDE Solver?
+A stencil-based PDE solver computes updates for each cell using neighboring cell values.
+Used in finite-difference, finite-volume, and finite-element methods.
+Common in fluid dynamics, weather modeling, and astrophysics.
+Example: 5-Point Stencil for 2D Heat Equation
+For a 2D grid with temperature u(x,y,t)u(x, y, t), update formula:
+ui,jt+1=ui,jt+α⋅(ui+1,jt+ui−1,jt+ui,j+1t+ui,j−1t−4ui,jt)u_{i,j}^{t+1} = u_{i,j}^{t} + \alpha \cdot \left( u_{i+1,j}^{t} + u_{i-1,j}^{t} + u_{i,j+1}^{t} + u_{i,j-1}^{t} - 4u_{i,j}^{t} \right)
+This involves reading five values per cell, computing one update, and writing one value.
+
+2. Why Does Parthenon Have Low Arithmetic Intensity?
+Arithmetic intensity = (Floating-Point Operations) / (Bytes Moved).
+Stencil-based PDE solvers have low arithmetic intensity because:
+Each update reads many values (neighboring cells).
+Each update performs few operations (e.g., addition, multiplication).
+More data movement than computation, making it memory-bound.
+
+3. Why Are Kernels Launched Every Timestep?
+Even though GPU memory (HBM) stores updated values, we still need kernel launches because:
+Time Integration: Each timestep applies updates based on the PDE.
+Data Dependencies: Next-timestep values depend on neighbor values from the previous timestep.
+Boundary Communication: Halo (ghost) cells need to be communicated and updated.
+Refinement/Coarsening: AMR dynamically changes resolution.
+Why Can’t We Just Tell the GPU to Do Everything at the Start?
+GPUs cannot predict future refinements in AMR.
+Ghost cell exchanges need communication every timestep.
+Different kernels handle different tasks (e.g., computation, communication).
+
+4. What Are These Kernel Launches For?
+Each timestep involves multiple kernel launches:
+Computation Kernels: Solve PDEs on each MeshBlock.
+Boundary Exchange Kernels: Update ghost cells (MPI communication).
+AMR Refinement Kernels: Prolongation/restriction of MeshBlocks.
+Reduction Kernels: Compute global quantities (e.g., CFL condition).
+
+5. What Data Type Does Parthenon Use?
+Kokkos Views use double precision by default.
+Users can choose single (float) or double (double) precision.
+Example:
+ Kokkos::View<double***> my_array("array", N, M, L);
+
+
+
+6. If We Use Only One GPU, What Communication Happens?
+No MPI communication (since no other GPUs/CPUs involved).
+Still need kernel launches for:
+Computation
+Mesh Refinement
+Boundary Updates (if AMR is enabled within the GPU)
+
+7. How Often Does Refinement Happen?
+Refinement does not happen every timestep.
+It happens when needed, based on:
+User-defined frequency (e.g., every 10 timesteps).
+Error threshold criteria (e.g., gradient-based).
+
+8. Explanation of the AMR Algorithm in Parthenon
+Parthenon follows a Block-Structured Adaptive Mesh Refinement (AMR) algorithm.
+Algorithmic Steps Per Timestep:
+Compute Updates for Each MeshBlock
+
+
+Solve PDEs using finite volume/stencil methods.
+Uses neighbor values for updates.
+Boundary Communication
+
+
+Exchange ghost cells across MeshBlocks.
+If multi-GPU, use asynchronous MPI for communication.
+Check Refinement Criteria
+
+
+If refinement is needed:
+Prolongation: Split coarse blocks into finer blocks.
+Restriction: Merge fine blocks into coarser blocks.
+Load Balancing
+
+
+Redistribute MeshBlocks if workload is imbalanced.
+Advance to Next Timestep
+
+
+
+9. Mapping AMR to a Multi-Core CPU System
+Each CPU core processes multiple MeshBlocks.
+Data is stored in DRAM (high latency compared to HBM).
+CPU threads handle parallel tasks:
+PDE computations
+Ghost cell updates
+Refinement
+
+10. Mapping AMR to a GPU System
+MeshBlocks are stored in HBM (GPU memory).
+Parallel Kernel Launches:
+Computation Kernel: Each thread block processes a MeshBlock.
+Boundary Kernel: Updates ghost cells asynchronously.
+Refinement Kernel: Applies prolongation/restriction.
+Kernel Launch Breakdown Per Timestep:
+1 Kernel for PDE updates.
+1 Kernel for boundary exchange.
+1 Kernel for refinement (if needed).
+1 Kernel for reductions.
+
+11. Example: Burgers’ Equation on GPU
+Burgers' Equation (1D):
+∂u∂t+u∂u∂x=0\frac{\partial u}{\partial t} + u \frac{\partial u}{\partial x} = 0
+Algorithmic Steps Per Timestep:
+Compute Numerical Flux (Godunov scheme).
+Launch kernel for PDE updates.
+Boundary Updates (exchange ghost cells).
+Launch kernel for MPI communication.
+Check Refinement Criteria (based on gradients).
+If refinement needed, launch AMR kernel.
+Advance Solution to Next Timestep.
+Expected GPU Kernel Launches Per Timestep:
+Kernel Type
+Launch Count
+PDE Solver
+1
+Boundary Exchange
+1
+Refinement (if needed)
+1
+Reduction (e.g., CFL check)
+1
+Total
+3-4 per step
+
+
+Conclusion
+Parthenon launches multiple kernels per timestep (computation, refinement, communication).
+Even with data in GPU memory, updates require new kernel executions.
+Stencil PDE solvers are memory-bound due to high data movement.
+AMR dynamically refines the grid, requiring periodic load balancing.
+"This involves reading five values per cell, computing one update, and writing one value." So are you saying that time involved to read those 5 values and write back one value is higher than the time to compute that one update?
+In general, we spend more time in reading the ghost cells and sending the ghost cells (Communication) than the Computation itself ? Is this true?
+
+Is kernel launches a big over head for them? What percentage of time goes into kernel launch overhead?
+
+Can Device Side Looping be implemented for Parthenon?
+
+"Reduction Kernels: Compute global quantities (e.g., CFL condition)." What are these?
+
+"Users can choose single (float) or double (double) precision." In the burgers equation example implemented in Parthenon - do they use float or double?
+
+
+"Compute Updates for Each MeshBlock
+Solve PDEs using finite volume/stencil methods.
+Uses neighbor values for updates." At this step, we don't need to communicate ghost cells, right? We just need to read them from the HBM?
+
+I'm guessing that this is how Algorithm should look like for GPUs:
+At a particular timestep: 
+1. Kernel 1 - Updating active cells - This involves reading the Data from HBM , computing the new value and writing it back to HBM.
+2. Kernel 2 -  Boundary information Communication - This involves figuring out who your neighbour is - then sending the data to - does this involve Restriction/Prolongation? or does that happen when it reaches the Receiver Rank?
+3. Kernel 3 - Refinement - Explain what happens here?
+
+What are these Reduce Kernels? What do they do?
+
+Responses to Your Questions:
+
+1. Is Reading/Writing More Expensive than Computation?
+Yes, in memory-bound problems like stencil-based PDE solvers, reading and writing (memory access) dominates over computation.
+Memory Access:
+
+
+Read 5 neighboring values per cell from memory.
+Write 1 updated value per cell back to memory.
+Total: 6 memory operations per cell.
+Computation:
+
+
+A stencil update usually involves a few floating-point operations (FLOPs), e.g., addition and multiplication.
+Why is memory access the bottleneck?
+
+
+HBM bandwidth is limited (e.g., ~900 GB/s on A100).
+Compute units can perform thousands of FLOPs per cycle, but they wait for data from memory.
+Loading ghost cells (MPI communication) is often more expensive than computing the update!
+Conclusion:
+ Yes, we spend more time reading ghost cells (communication) than computing the update itself.
+
+2. Is Kernel Launch a Big Overhead in Parthenon?
+Yes, kernel launches are a major overhead, especially for small blocks.
+On GPUs, kernel launches take 5-7 μs per launch.
+If many small MeshBlocks exist, kernel launch overhead becomes significant.
+What percentage of time is spent on kernel launch overhead?
+Figure 8 in the paper shows that performance drops by 82× when using many small blocks, mainly due to kernel launch overhead.
+With buffer/block packing, Parthenon reduces the overhead to ~3.5×, making it comparable to CPU performance.
+Optimizations to reduce kernel launch overhead:
+MeshBlock packing: Combine multiple MeshBlocks into one kernel.
+Variable packing: Pack multiple variables into one memory block.
+Fused kernels: Merge computation and communication steps.
+
+3. Can Device-Side Looping Be Implemented in Parthenon?
+Yes, device-side looping (looping within a single kernel launch) can reduce kernel launch overhead.
+Currently, Parthenon launches separate kernels per timestep.
+Alternative: Use a single long-running kernel that:
+Iterates over multiple timesteps inside device memory.
+Avoids frequent host-device synchronization.
+Challenges:
+AMR requires dynamic refinement, which is hard to handle inside a single kernel.
+Boundary updates (MPI communication) still need synchronization.
+
+4. What Are Reduction Kernels?
+Reduction kernels compute global quantities needed for the simulation.
+ They perform parallel reductions across all MeshBlocks.
+Examples of Reduction Kernels in Parthenon:
+CFL Condition Calculation:
+
+
+Finds the maximum velocity in the domain to determine the largest stable timestep.
+Uses parallel_reduce to get global max velocity.
+Conservation Checks:
+
+
+Computes total energy/momentum to ensure physical conservation.
+Error Estimation for AMR:
+
+
+Computes gradients to check if refinement is needed.
+Example in Kokkos (Parallel Reduction for CFL condition):
+Kokkos::parallel_reduce("CFL_Condition", N, KOKKOS_LAMBDA(int i, double& max_v) {
+    max_v = fmax(max_v, velocity[i]);
+}, Kokkos::Max<double>(cfl_max));
+
+
+5. What Precision Does Parthenon Use for Burgers’ Equation?
+Parthenon defaults to double precision (double).
+Users can switch to float for better performance if precision is not critical.
+
+6. Do We Need to Communicate Ghost Cells During PDE Update?
+No. Ghost cells are already present in HBM from previous updates.
+Step 1 (Computation Kernel): Reads active + ghost cells from GPU memory.
+Step 2 (Boundary Exchange): Sends ghost cells only after computation.
+Why don’t we need communication during computation?
+Each MeshBlock already has ghost cells stored in HBM.
+Computation only reads ghost cells; it doesn’t modify them.
+
+7. Breakdown of Algorithm on GPU (Per Timestep)
+Step
+Kernel
+Description
+1
+Compute Kernel
+Updates active cells using stencil. Reads from HBM, computes, writes to HBM.
+2
+Boundary Communication Kernel
+Identifies neighbor ranks, sends ghost cells via MPI.
+3
+Refinement Kernel (if needed)
+Checks gradient/error, applies restriction/prolongation.
+4
+Reduction Kernel
+Computes CFL condition, global quantities.
+
+
+8. Does Restriction/Prolongation Happen Before or After Ghost Cell Communication?
+Before sending data (coarse-to-fine).
+After receiving data (fine-to-coarse).
+How Refinement Kernel Works:
+Restriction: Averages fine cells into coarse cells.
+Prolongation: Interpolates coarse cells into fine cells.
+Example (2× Refinement in 1D):
+fine[i] = 0.5 * (coarse[i] + coarse[i+1]);
+
+
+9. Summary of Kernels Launched Every Timestep
+Compute Kernel (1 launch per MeshBlockPack)
+Boundary Communication Kernel (1 launch per exchange)
+Refinement Kernel (if AMR is triggered)
+Reduction Kernel (1 launch for CFL/global values)
+Total: 3-4 kernel launches per timestep.
+
+Conclusion
+Memory access dominates over computation in Parthenon.
+Kernel launch overhead is a major bottleneck, mitigated by packing techniques.
+Ghost cells are read from GPU memory, not communicated during computation.
+Reduction kernels compute CFL condition and global properties.
+AMR refinement includes restriction/prolongation before/after boundary communication.
+Would you like a GPU kernel code snippet for Burgers’ Equation? 🚀
+I have these questions on top of them on Parthenon itself:
+
+"Challenges:
+AMR requires dynamic refinement, which is hard to handle inside a single kernel.
+Boundary updates (MPI communication) still need synchronization."
+These can be solved by : Do it only for timesteps where you aren't performing refinement
+Boundary updates synchronisation can be handled by CUDA Synchronisations or GPU Collectives
+
+So is Device-Side Looping possible in Parthenon?
+
+3	Refinement Kernel (if needed)	Checks gradient/error, applies restriction/prolongation.
+The third kernel has restriction and prolongation
+
+My definition of Restriction and Prolongation:
+MeshBlocks close to each other may be at differentr levels. While updating active cells, we need the ghost cell information in the same level as the MeshBlock - so it needs to be restricted when communicating from Coarser level to finer level and prolongated when communicating from finer level to coarser level. So this needs to happen every cycle- Is my understanding correct? Why would it happen in Refinement kernel that didn't make sense to me.
+
+I'm guessing prolongation is something like duplication of data  - is it correct?
+
+Does Restriction/Prolongation Happen Before or After Ghost Cell Communication?
+
+—--------------------------------------------
+
+How does this work account for "inter-node communication bottlenecks"?
+
+Explain the Task based execution model?
+
+What is zone-cycles per second per node? What is a zone? what is a zone-cycle?
+
+Is it possible to tune kokkos more for GPUs?
+
+What is asynchronous, one-sided MPI communication?
+
+How does parthenon overlap communication with computation?
+
+How can we tune kokkos more for GPUs?
